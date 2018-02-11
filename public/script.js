@@ -26,32 +26,32 @@ $(function() {
             regions: function(){
                 this.pause();
                 this.echo('Retrieving all regions...');
-                db.collection("regions").orderBy('name').get().then(listDocuments);
+                db.collection("regions").orderBy('ts').get().then(listDocuments);
             },
             all: function(){
                 this.pause();
                 this.echo('Retrieving all items...');
-                db.collection("items").orderBy('name').get().then(listDocuments);
+                db.collection("items").get().then(listDocuments);
             },
             items: function(){
                 this.pause();
                 this.echo('List items by region (retrieving regions)...');
-                db.collection("regions").orderBy('name').get().then(querySnapshot => {
+                db.collection("regions").orderBy('ts').get().then(querySnapshot => {
                     if (querySnapshot.empty){
                         this.echo('No regions exist!');
                     } else {
                         var prompt = '';
                         for (var i = 0; i < querySnapshot.size; i++) {
                             var queryDocumentSnapshot = querySnapshot.docs[i];
-                            prompt += `${i + 1}: ${queryDocumentSnapshot.get('name')}\n`;
+                            prompt += `${i + 1}: ${queryDocumentSnapshot.id}\n`;
                         }
                         prompt += `Select a region (Enter a number between 1 and ${querySnapshot.size} or "exit"): `;
                         this.push(function(choice){
                             if (choice > 0 && choice <= querySnapshot.size) {
                                 terminal.pause();
                                 var queryDocumentSnapshot = querySnapshot.docs[choice - 1];
-                                this.echo('Retrieving all items in region: ' + queryDocumentSnapshot.get('name'))
-                                db.collection("items").where('region', '==', queryDocumentSnapshot.id).orderBy('name').get().then(listDocuments);
+                                this.echo('Retrieving all items in region: ' + queryDocumentSnapshot.id)
+                                db.collection("items").where('region', '==', queryDocumentSnapshot.id).get().then(listDocuments);
                                 this.pop();
                             }
                         }, {
@@ -81,13 +81,14 @@ $(function() {
                         }
                         terminal.pause();
                         this.echo(`Adding new region: ${name}`);
-                        db.collection("regions").add({
-                            name: name
+                        db.collection("regions").doc(name).set({
+                            ts: firebase.firestore.FieldValue.serverTimestamp()
                         })
-                        .then(docRef => {
-                            this.echo("Region written with ID: " + docRef.id);
+                        .then(() => {
+                            this.echo("Success!");
                             terminal.resume();
-                        });
+                        })
+                        .catch(errorHandler);
                     },
                     item: function(name){
                         if (typeof name != 'string') {
@@ -101,7 +102,7 @@ $(function() {
                         }
                         terminal.pause();
                         this.echo(`Adding new item: ${name}`);
-                        db.collection("regions").orderBy('name').get()
+                        db.collection("regions").orderBy('ts').get()
                         // db.ref('/regions').once('value')
                         .then(querySnapshot => {
                             if (querySnapshot.empty){
@@ -111,7 +112,7 @@ $(function() {
                                 var i = 0;
                                 for (var i = 0; i < querySnapshot.size; i++) {
                                     var queryDocumentSnapshot = querySnapshot.docs[i];
-                                    prompt += `${i + 1}: ${queryDocumentSnapshot.get('name')}\n`;
+                                    prompt += `${i + 1}: ${queryDocumentSnapshot.id}\n`;
                                 }
                                 prompt += `Enter a number between 1 and ${querySnapshot.size} (or "exit"): `;
                                 this.push(function(choice){
@@ -119,14 +120,18 @@ $(function() {
                                         terminal.pause();
                                         // var region = querySnapshot.docs[choice - 1];
                                         // console.log(JSON.stringify(obj));
-                                        db.collection("items").add({
-                                            name: name,
+                                        db.collection("items").doc(name).set({
+                                            ts: firebase.firestore.FieldValue.serverTimestamp(),
                                             region: querySnapshot.docs[choice - 1].id
                                         })
                                         .then(docRef => {
-                                            this.echo("Item written with ID: " + docRef.id);
+                                            this.echo("Success!");
                                             this.pop();
                                             terminal.resume();
+                                        })
+                                        .catch(error => {
+                                            this.pop();
+                                            errorHandler();
                                         });
                                     }
                                 }, {
@@ -156,12 +161,18 @@ $(function() {
         if (querySnapshot.size) {
             terminal.echo('Found: ' + querySnapshot.size);
             querySnapshot.forEach(queryDocumentSnapshot => {
-                terminal.echo(queryDocumentSnapshot.get('name'));
+                terminal.echo(queryDocumentSnapshot.id);
             });
         } else {
             terminal.echo('None found!');
         }
         terminal.resume();
     };
+
+    function errorHandler(error) {
+        terminal.error(error.message);
+        console.error(error);
+        terminal.resume();
+    }
 
 });
